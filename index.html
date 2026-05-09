@@ -950,18 +950,33 @@ function startPark() {
 }
 
 function initSaveScreen() {
-  state.pendingPos = state.currentPos ? {...state.currentPos} : { lat:40.4168, lng:-3.7038 };
+  // Usar posición actual si existe, si no pedir GPS en segundo plano
+  state.pendingPos = state.currentPos ? {...state.currentPos} : null;
   document.getElementById('spot-name').value = '';
   document.getElementById('spot-ref').value = '';
   document.getElementById('spot-notes').value = '';
   document.getElementById('photos-strip').innerHTML = `<div class="photo-btn" id="photo-add-btn" onclick="addPhoto()">📷<span style="font-size:10px;margin-top:2px">Foto</span></div>`;
   state.pendingPhotos = [];
 
-  const {lat,lng} = state.pendingPos;
-  document.getElementById('coords-text').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-
-  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.003},${lat-0.002},${lng+0.003},${lat+0.002}&layer=mapnik&marker=${lat},${lng}`;
-  document.getElementById('save-map-inner').innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75)"></iframe>`;
+  if (state.pendingPos) {
+    const {lat,lng} = state.pendingPos;
+    document.getElementById('coords-text').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.003},${lat-0.002},${lng+0.003},${lat+0.002}&layer=mapnik&marker=${lat},${lng}`;
+    document.getElementById('save-map-inner').innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75)"></iframe>`;
+  } else {
+    document.getElementById('coords-text').textContent = 'obteniendo GPS…';
+    // Intentar GPS en segundo plano y actualizar si llega
+    navigator.geolocation.getCurrentPosition(pos => {
+      state.pendingPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      state.currentPos = { ...state.pendingPos };
+      const {lat,lng} = state.pendingPos;
+      document.getElementById('coords-text').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.003},${lat-0.002},${lng+0.003},${lat+0.002}&layer=mapnik&marker=${lat},${lng}`;
+      document.getElementById('save-map-inner').innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75)"></iframe>`;
+    }, () => {
+      document.getElementById('coords-text').textContent = 'GPS no disponible';
+    }, { enableHighAccuracy: true, timeout: 10000 });
+  }
 }
 
 function setRef(text) {
@@ -999,13 +1014,19 @@ function removePhoto(i) {
 }
 
 function confirmSave() {
-  const pos = state.pendingPos;
-  if (!pos) { toast('⚠️ Esperando GPS…'); return; }
+  const pos = state.pendingPos || state.currentPos;
+  if (!pos) {
+    // Si aún no hay GPS, guardar con posición aproximada y avisar
+    state.pendingPos = { lat: 40.4168, lng: -3.7038 };
+    toast('⚠️ GPS no disponible, guardando sin coordenadas exactas');
+  }
+
+  const finalPos = state.pendingPos || state.currentPos || { lat: 0, lng: 0 };
 
   const spot = {
     id: uid(),
-    lat: pos.lat,
-    lng: pos.lng,
+    lat: finalPos.lat,
+    lng: finalPos.lng,
     name: document.getElementById('spot-name').value.trim() || 'Aparcamiento',
     ref: document.getElementById('spot-ref').value.trim(),
     notes: document.getElementById('spot-notes').value.trim(),
