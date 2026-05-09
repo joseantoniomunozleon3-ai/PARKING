@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ParkRadar">
+<meta name="description" content="Localiza tu coche aparcado con precisión">
+<title>ParkRadar</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #07070d;
+    --bg2: #0e0e1a;
+    --bg3: #141424;
+    --amber: #f5a623;
+    --amber-dim: #c07a10;
+    --amber-glow: rgba(245,166,35,0.18);
+    --cyan: #00d4ff;
+    --cyan-dim: rgba(0,212,255,0.12);
+    --red: #ff4757;
+    --green: #2ed573;
+    --text: #e8e8f0;
+    --text-dim: #7070a0;
+    --border: rgba(245,166,35,0.15);
+    --card: rgba(14,14,26,0.9);
+    --radius: 16px;
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  html, body {
+    height: 100%; width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    overflow: hidden;
+    position: fixed;
+  }
+
+  /* ── NOISE OVERLAY ── */
+  body::before {
+    content:'';
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    opacity: 0.5;
+  }
+
+  /* ── APP SHELL ── */
+  #app {
+    position: relative; z-index:1;
+    height: 100%; width: 100%;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── SCREENS ── */
+  .screen {
+    position: absolute; inset:0;
+    display: flex; flex-direction: column;
+    opacity: 0; pointer-events: none;
+    transform: translateY(20px);
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  .screen.active {
+    opacity: 1; pointer-events: all;
+    transform: translateY(0);
+  }
+
+  /* ── HEADER ── */
+  .header {
+    padding: 52px 24px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(7,7,13,0.98) 0%, transparent 100%);
+    position: relative; z-index:10;
+  }
+  .logo {
+    font-family: var(--font-display);
+    font-size: 32px; letter-spacing: 3px;
+    color: var(--amber);
+    text-shadow: 0 0 20px var(--amber), 0 0 60px rgba(245,166,35,0.3);
+    line-height:1;
+  }
+  .logo span { color: var(--text); }
+  .status-dot {
+    width:10px; height:10px; border-radius:50%;
+    background: var(--green);
+    box-shadow: 0 0 12px var(--green);
+    animation: pulse-dot 2s infinite;
+  }
+  @keyframes pulse-dot {
+    0%,100%{opacity:1; transform:scale(1)}
+    50%{opacity:.6; transform:scale(0.8)}
+  }
+
+  /* ── MAP CONTAINER ── */
+  #map-home, #map-nav {
+    flex:1; position:relative;
+    background: var(--bg2);
+    overflow: hidden;
+  }
+  #map-home iframe, #map-nav iframe {
+    width:100%; height:100%; border:none;
+    filter: invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75);
+  }
+
+  /* Map overlay gradient bottom */
+  .map-fade-bottom {
+    position:absolute; bottom:0; left:0; right:0; height:280px; pointer-events:none;
+    background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
+    z-index:2;
+  }
+
+  /* ── BOTTOM PANEL ── */
+  .bottom-panel {
+    padding: 0 20px 36px;
+    position: relative; z-index: 5;
+    background: var(--bg);
+  }
+
+  /* ── PARK BUTTON ── */
+  .btn-park {
+    width:100%; padding:22px 24px;
+    background: var(--amber);
+    border: none; border-radius: var(--radius);
+    font-family: var(--font-display);
+    font-size: 26px; letter-spacing: 3px;
+    color: var(--bg); cursor: pointer;
+    position: relative; overflow: hidden;
+    box-shadow: 0 8px 40px rgba(245,166,35,0.4), 0 2px 0 rgba(255,255,255,0.1) inset;
+    transition: transform .15s, box-shadow .15s;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+  }
+  .btn-park:active { transform: scale(0.97); box-shadow: 0 4px 20px rgba(245,166,35,0.3); }
+  .btn-park::after {
+    content:'';
+    position:absolute; top:-50%; left:-60%;
+    width:50%; height:200%;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.25), transparent);
+    transform: skewX(-20deg);
+    animation: shimmer 3s infinite;
+  }
+  @keyframes shimmer {
+    0%{left:-60%} 60%,100%{left:120%}
+  }
+  .btn-park .icon { font-size:28px; }
+
+  /* ── FIND BUTTON ── */
+  .btn-find {
+    width:100%; padding:22px 24px;
+    background: transparent;
+    border: 2px solid var(--amber);
+    border-radius: var(--radius);
+    font-family: var(--font-display);
+    font-size: 26px; letter-spacing: 3px;
+    color: var(--amber); cursor: pointer;
+    box-shadow: 0 0 30px var(--amber-glow), inset 0 0 30px rgba(245,166,35,0.04);
+    transition: all .2s;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+  }
+  .btn-find:active { background: var(--amber-glow); transform: scale(0.97); }
+
+  .btn-gap { height: 12px; }
+
+  /* ── SAVED SPOT CARD ── */
+  .spot-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 14px;
+    backdrop-filter: blur(20px);
+    animation: slide-up .3s ease;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  .spot-card:hover { border-color: var(--amber); background: rgba(245,166,35,0.06); }
+  @keyframes slide-up {
+    from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)}
+  }
+  .spot-icon {
+    width:44px; height:44px; border-radius:12px;
+    background: var(--amber-glow);
+    display:flex; align-items:center; justify-content:center;
+    font-size:22px; flex-shrink:0;
+    border: 1px solid rgba(245,166,35,0.3);
+  }
+  .spot-info { flex:1; overflow:hidden; }
+  .spot-name {
+    font-size:15px; font-weight:600; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .spot-meta {
+    font-size:12px; color:var(--text-dim);
+    font-family: var(--font-mono);
+    margin-top:3px;
+  }
+  .spot-dist {
+    font-family: var(--font-mono);
+    font-size:13px; color:var(--amber);
+    font-weight:600; flex-shrink:0;
+  }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    text-align:center; padding:32px 24px;
+    color: var(--text-dim);
+  }
+  .empty-icon { font-size:48px; margin-bottom:12px; opacity:.4; }
+  .empty-title { font-size:16px; font-weight:500; margin-bottom:6px; }
+  .empty-sub { font-size:13px; line-height:1.6; }
+
+  /* ── SAVE SCREEN ── */
+  #screen-save .header { padding-bottom:12px; }
+  .save-map-wrap {
+    flex:1; position:relative; overflow:hidden;
+    border-radius:0;
+    min-height:200px; max-height:260px;
+  }
+  .save-map-wrap iframe {
+    width:100%;height:100%;border:none;
+    filter: invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75);
+  }
+  .pin-center {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-100%);
+    font-size:48px; z-index:10;
+    filter:drop-shadow(0 4px 12px rgba(0,0,0,0.8));
+    animation: pin-drop .4s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes pin-drop {
+    from{transform:translate(-50%,-140%) scale(0.4)} to{transform:translate(-50%,-100%) scale(1)}
+  }
+  .save-form {
+    flex:1; overflow-y:auto; padding:20px;
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .save-title {
+    font-family:var(--font-display);
+    font-size:28px; letter-spacing:2px;
+    color:var(--amber);
+  }
+  .coords-badge {
+    font-family:var(--font-mono); font-size:12px;
+    color: var(--text-dim); background:var(--bg3);
+    padding:8px 12px; border-radius:8px;
+    border:1px solid var(--border);
+    display:flex; gap:8px; align-items:center;
+  }
+  .coords-badge span { color:var(--cyan); }
+
+  label { font-size:13px; color:var(--text-dim); font-weight:500; display:block; margin-bottom:6px; }
+  input[type=text], textarea {
+    width:100%; padding:14px 16px;
+    background:var(--bg3); border:1px solid var(--border);
+    border-radius:12px; color:var(--text);
+    font-family:var(--font-body); font-size:15px;
+    outline:none; transition:border-color .2s, box-shadow .2s;
+    -webkit-appearance:none;
+  }
+  input:focus, textarea:focus {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 3px var(--amber-glow);
+  }
+  textarea { height:80px; resize:none; }
+
+  .photos-strip {
+    display:flex; gap:10px; overflow-x:auto;
+    padding-bottom:6px;
+  }
+  .photo-btn {
+    width:72px; height:72px; flex-shrink:0;
+    border:2px dashed var(--border); border-radius:12px;
+    background:var(--bg3); cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-size:22px; color:var(--text-dim);
+    transition:all .2s;
+  }
+  .photo-btn:active { border-color:var(--amber); color:var(--amber); }
+  .photo-thumb {
+    width:72px; height:72px; flex-shrink:0;
+    border-radius:12px; overflow:hidden;
+    position:relative; border:2px solid var(--border);
+  }
+  .photo-thumb img { width:100%;height:100%;object-fit:cover; }
+  .photo-del {
+    position:absolute; top:2px; right:2px;
+    background:rgba(0,0,0,0.7); border:none;
+    color:#fff; border-radius:50%; width:20px; height:20px;
+    font-size:11px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  .btn-save-confirm {
+    padding:20px; background:var(--amber);
+    border:none; border-radius:var(--radius);
+    font-family:var(--font-display); font-size:24px; letter-spacing:3px;
+    color:var(--bg); cursor:pointer;
+    box-shadow:0 8px 40px rgba(245,166,35,0.4);
+    transition: transform .15s, opacity .15s;
+    flex-shrink:0;
+  }
+  .btn-save-confirm:active { transform:scale(0.97); opacity:.85; }
+
+  /* ── NAVIGATE SCREEN ── */
+  #screen-nav {
+    background: var(--bg);
+  }
+  #screen-nav #map-nav {
+    flex:1;
+  }
+  .nav-bottom {
+    padding: 16px 20px 36px;
+    background: var(--bg);
+    position:relative; z-index:5;
+  }
+  .nav-info-card {
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px 18px;
+    margin-bottom:14px;
+    backdrop-filter:blur(20px);
+    display:flex; align-items:center; gap:14px;
+  }
+  .nav-dist-big {
+    font-family:var(--font-display);
+    font-size:42px; color:var(--amber);
+    line-height:1;
+    text-shadow: 0 0 30px var(--amber);
+  }
+  .nav-dist-unit { font-size:16px; color:var(--text-dim); font-weight:400; }
+  .nav-label { font-size:13px; color:var(--text-dim); margin-top:4px; }
+  .nav-spot-name { font-size:15px; font-weight:600; color:var(--text); margin-top:2px; }
+
+  .btn-gmaps {
+    width:100%; padding:20px;
+    background: linear-gradient(135deg, #1a73e8, #0d47a1);
+    border:none; border-radius:var(--radius);
+    font-family:var(--font-display); font-size:24px; letter-spacing:2px;
+    color:#fff; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:12px;
+    box-shadow:0 8px 30px rgba(26,115,232,0.4);
+    transition: transform .15s;
+    margin-bottom:10px;
+  }
+  .btn-gmaps:active { transform:scale(0.97); }
+
+  .btn-back {
+    width:100%; padding:16px;
+    background:transparent; border:1px solid var(--border);
+    border-radius:var(--radius); font-family:var(--font-body);
+    font-size:15px; color:var(--text-dim); cursor:pointer;
+    transition:all .2s;
+  }
+  .btn-back:active { border-color:var(--amber); color:var(--amber); }
+
+  /* ── HISTORY SCREEN ── */
+  #screen-history .bottom-panel {
+    flex:1; overflow-y:auto; padding-top:0;
+  }
+  .history-header {
+    font-family:var(--font-display);
+    font-size:32px; letter-spacing:2px;
+    color:var(--text); margin-bottom:16px;
+    padding: 0 20px 0;
+  }
+  .history-header span { color:var(--amber); }
+
+  /* ── TOAST ── */
+  #toast {
+    position:fixed; top:60px; left:50%; transform:translateX(-50%) translateY(-80px);
+    background:var(--bg3); border:1px solid var(--amber);
+    border-radius:100px; padding:12px 24px;
+    font-size:14px; font-weight:500;
+    color:var(--text); z-index:100;
+    box-shadow:0 8px 30px rgba(0,0,0,0.5), 0 0 20px var(--amber-glow);
+    transition:transform .35s cubic-bezier(0.34,1.2,0.64,1), opacity .35s;
+    white-space:nowrap; pointer-events:none; opacity:0;
+  }
+  #toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+
+  /* ── NAV BAR ── */
+  .nav-bar {
+    display:flex; background:var(--bg2);
+    border-top:1px solid var(--border);
+    position:relative; z-index:20;
+  }
+  .nav-item {
+    flex:1; padding:12px 0 10px;
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    cursor:pointer; border:none; background:transparent;
+    color:var(--text-dim); font-size:10px; font-family:var(--font-body);
+    font-weight:500; transition:color .2s;
+  }
+  .nav-item.active { color:var(--amber); }
+  .nav-item .ni { font-size:22px; }
+
+  /* ── LOADING ── */
+  .loading-wrap {
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap:16px; padding:40px;
+    flex:1;
+  }
+  .spinner {
+    width:48px; height:48px;
+    border:3px solid var(--border);
+    border-top-color:var(--amber);
+    border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  /* ── CONFIRM DELETE ── */
+  .confirm-overlay {
+    position:fixed; inset:0; z-index:50;
+    background:rgba(7,7,13,0.85);
+    backdrop-filter:blur(8px);
+    display:flex; align-items:flex-end; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .25s;
+  }
+  .confirm-overlay.open { opacity:1; pointer-events:all; }
+  .confirm-box {
+    background:var(--bg3); border:1px solid var(--border);
+    border-radius:24px 24px 0 0; padding:28px 24px 44px;
+    width:100%; max-width:500px;
+    transform:translateY(40px); transition:transform .3s cubic-bezier(0.34,1.1,0.64,1);
+  }
+  .confirm-overlay.open .confirm-box { transform:translateY(0); }
+  .confirm-title { font-family:var(--font-display); font-size:26px; color:var(--red); letter-spacing:2px; margin-bottom:8px; }
+  .confirm-sub { font-size:14px; color:var(--text-dim); margin-bottom:24px; line-height:1.5; }
+  .confirm-actions { display:flex; gap:12px; }
+  .btn-del { flex:1; padding:16px; border:none; background:var(--red); color:#fff; border-radius:12px; font-family:var(--font-display); font-size:20px; letter-spacing:2px; cursor:pointer; }
+  .btn-cancel { flex:1; padding:16px; border:1px solid var(--border); background:transparent; color:var(--text-dim); border-radius:12px; font-family:var(--font-body); font-size:15px; cursor:pointer; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width:4px; height:4px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+  /* ── PULSE RING on saved dot ── */
+  .map-dot {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    z-index:5;
+  }
+  .map-dot::before, .map-dot::after {
+    content:'';
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+  }
+  .map-dot::before {
+    width:16px; height:16px;
+    background:var(--amber);
+    box-shadow:0 0 20px var(--amber);
+    z-index:2;
+  }
+  .map-dot::after {
+    width:50px; height:50px;
+    background:var(--amber-glow);
+    animation:pulse-ring 2s infinite;
+  }
+  @keyframes pulse-ring {
+    0%{transform:translate(-50%,-50%) scale(0.5); opacity:1}
+    100%{transform:translate(-50%,-50%) scale(1.6); opacity:0}
+  }
+
+  /* Ref note section */
+  .ref-section { margin-top:2px; }
+  .ref-label { font-size:12px; color:var(--text-dim); font-weight:500; margin-bottom:6px; }
+  .ref-suggestions {
+    display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;
+  }
+  .ref-chip {
+    padding:6px 14px; border-radius:100px;
+    border:1px solid var(--border); background:var(--bg3);
+    font-size:13px; color:var(--text-dim); cursor:pointer;
+    transition:all .2s;
+  }
+  .ref-chip:active { border-color:var(--amber); color:var(--amber); }
+
+  /* ── Section titles ── */
+  .section-title {
+    font-size:12px; font-weight:600; color:var(--text-dim);
+    letter-spacing:2px; text-transform:uppercase;
+    margin-bottom:10px; padding:0 4px;
+  }
+
+  /* ── Timestamp highlight ── */
+  .time-ago {
+    font-family:var(--font-mono); font-size:11px;
+    color:var(--cyan); padding:2px 8px;
+    background:var(--cyan-dim); border-radius:6px;
+  }
+</style>
+</head>
+<body>
+
+<div id="toast">✅ Aparcamiento guardado</div>
+
+<!-- ═══════════════════════════════════
+     SCREEN HOME
+═══════════════════════════════════ -->
+<div id="screen-home" class="screen active" style="background:var(--bg);">
+  <div class="header">
+    <div class="logo">PARK<span>RADAR</span></div>
+    <div class="status-dot" id="gps-dot" title="GPS activo"></div>
+  </div>
+
+  <div id="map-home" style="flex:1;position:relative;min-height:0;">
+    <div id="map-home-inner" style="width:100%;height:100%;"></div>
+    <div class="map-fade-bottom"></div>
+  </div>
+
+  <div class="bottom-panel" id="home-bottom">
+    <!-- saved spots appear here -->
+  </div>
+
+  <div class="nav-bar">
+    <button class="nav-item active" onclick="showScreen('home')">
+      <span class="ni">🗺️</span>Mapa
+    </button>
+    <button class="nav-item" onclick="showScreen('history')">
+      <span class="ni">📋</span>Historial
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SCREEN SAVE
+═══════════════════════════════════ -->
+<div id="screen-save" class="screen" style="background:var(--bg);">
+  <div class="header">
+    <div class="logo">PARK<span>RADAR</span></div>
+    <button onclick="showScreen('home')" style="background:none;border:none;color:var(--text-dim);font-size:28px;cursor:pointer;">✕</button>
+  </div>
+
+  <div class="save-map-wrap" id="save-map-wrap">
+    <div id="save-map-inner" style="width:100%;height:100%;"></div>
+    <div class="pin-center">📍</div>
+  </div>
+
+  <div class="save-form" id="save-form">
+    <div>
+      <div class="save-title">APARCO AQUÍ</div>
+      <div class="coords-badge" id="coords-badge">
+        🛰 <span id="coords-text">obteniendo GPS…</span>
+      </div>
+    </div>
+
+    <div>
+      <label>Nombre del sitio (opcional)</label>
+      <input type="text" id="spot-name" placeholder="Ej: Cerca del Corte Inglés, Zona Azul…">
+    </div>
+
+    <div class="ref-section">
+      <div class="ref-label">📌 REFERENCIA CERCANA</div>
+      <div class="ref-suggestions">
+        <div class="ref-chip" onclick="setRef('Bar / Café')">☕ Bar / Café</div>
+        <div class="ref-chip" onclick="setRef('Supermercado')">🛒 Super</div>
+        <div class="ref-chip" onclick="setRef('Farmacia')">💊 Farmacia</div>
+        <div class="ref-chip" onclick="setRef('Semáforo')">🚦 Semáforo</div>
+        <div class="ref-chip" onclick="setRef('Esquina')">↗️ Esquina</div>
+      </div>
+      <input type="text" id="spot-ref" placeholder="Escribe referencia manual…">
+    </div>
+
+    <div>
+      <label>Notas</label>
+      <textarea id="spot-notes" placeholder="Planta -1, junto al ascensor…"></textarea>
+    </div>
+
+    <div>
+      <label>Foto (opcional)</label>
+      <div class="photos-strip" id="photos-strip">
+        <div class="photo-btn" id="photo-add-btn" onclick="addPhoto()">
+          📷<span style="font-size:10px;margin-top:2px">Foto</span>
+        </div>
+      </div>
+      <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
+    </div>
+
+    <button class="btn-save-confirm" onclick="confirmSave()">
+      GUARDAR APARCAMIENTO
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SCREEN HISTORY
+═══════════════════════════════════ -->
+<div id="screen-history" class="screen" style="background:var(--bg);">
+  <div class="header">
+    <div class="logo">PARK<span>RADAR</span></div>
+    <button onclick="showScreen('home')" style="background:none;border:none;color:var(--text-dim);font-size:22px;cursor:pointer;">✕</button>
+  </div>
+
+  <div style="flex:1;overflow-y:auto;padding:0 20px 20px;">
+    <div class="history-header"><span>HISTORIAL</span> DE APARCAMIENTOS</div>
+    <div id="history-list"></div>
+  </div>
+
+  <div class="nav-bar">
+    <button class="nav-item" onclick="showScreen('home')">
+      <span class="ni">🗺️</span>Mapa
+    </button>
+    <button class="nav-item active" onclick="showScreen('history')">
+      <span class="ni">📋</span>Historial
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SCREEN NAVIGATE
+═══════════════════════════════════ -->
+<div id="screen-nav" class="screen" style="background:var(--bg);">
+  <div class="header" style="position:absolute;top:0;left:0;right:0;z-index:20;">
+    <div class="logo">PARK<span>RADAR</span></div>
+    <button onclick="showScreen('home')" style="background:none;border:none;color:var(--text-dim);font-size:28px;cursor:pointer;">✕</button>
+  </div>
+
+  <div id="map-nav" style="flex:1;min-height:0;position:relative;">
+    <div id="map-nav-inner" style="width:100%;height:100%;"></div>
+    <div class="map-fade-bottom"></div>
+  </div>
+
+  <div class="nav-bottom">
+    <div class="nav-info-card" id="nav-info-card">
+      <div style="flex:1;">
+        <div id="nav-dist-display" class="nav-dist-big">—</div>
+        <div class="nav-label">hasta tu coche</div>
+        <div class="nav-spot-name" id="nav-spot-name-display">—</div>
+      </div>
+      <div style="font-size:40px;">🚗</div>
+    </div>
+    <button class="btn-gmaps" id="btn-open-gmaps" onclick="openGoogleMaps()">
+      <span>🔵</span> ABRIR EN GOOGLE MAPS
+    </button>
+    <button class="btn-back" onclick="showScreen('home')">Volver al inicio</button>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-title">ELIMINAR</div>
+    <div class="confirm-sub">¿Quieres borrar este aparcamiento guardado? Esta acción no se puede deshacer.</div>
+    <div class="confirm-actions">
+      <button class="btn-del" onclick="deleteConfirmed()">Borrar</button>
+      <button class="btn-cancel" onclick="closeConfirm()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────
+// STATE
+// ─────────────────────────────────────
+let state = {
+  currentPos: null,
+  spots: JSON.parse(localStorage.getItem('pr_spots') || '[]'),
+  pendingPos: null,
+  pendingPhotos: [],
+  activeSpot: null,
+  deleteId: null,
+  mapLoaded: { home:false, save:false, nav:false }
+};
+
+// ─────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────
+function saveSpots() {
+  localStorage.setItem('pr_spots', JSON.stringify(state.spots));
+}
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+}
+
+function timeAgo(ts) {
+  const diff = (Date.now() - ts) / 1000;
+  if (diff < 60) return 'hace un momento';
+  if (diff < 3600) return `hace ${Math.floor(diff/60)} min`;
+  if (diff < 86400) return `hace ${Math.floor(diff/3600)}h`;
+  if (diff < 7*86400) return `hace ${Math.floor(diff/86400)}d`;
+  return new Date(ts).toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+}
+
+function distanceMeters(lat1,lon1,lat2,lon2) {
+  const R=6371000, phi1=lat1*Math.PI/180, phi2=lat2*Math.PI/180;
+  const dphi=(lat2-lat1)*Math.PI/180, dl=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dphi/2)**2+Math.cos(phi1)*Math.cos(phi2)*Math.sin(dl/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function formatDist(m) {
+  if (m<1000) return Math.round(m)+'m';
+  return (m/1000).toFixed(1)+'km';
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2800);
+}
+
+// ─────────────────────────────────────
+// GPS
+// ─────────────────────────────────────
+function startGPS() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(pos => {
+    state.currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    document.getElementById('gps-dot').style.background = 'var(--green)';
+    renderHome();
+  }, err => {
+    document.getElementById('gps-dot').style.background = 'var(--red)';
+    console.warn('GPS:', err);
+  }, { enableHighAccuracy:true, maximumAge:5000 });
+}
+
+// ─────────────────────────────────────
+// SCREENS
+// ─────────────────────────────────────
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  if (name==='home') renderHome();
+  if (name==='history') renderHistory();
+  if (name==='save') initSaveScreen();
+  if (name==='nav') initNavScreen();
+}
+
+// ─────────────────────────────────────
+// HOME
+// ─────────────────────────────────────
+function renderHome() {
+  const panel = document.getElementById('home-bottom');
+  const pos = state.currentPos;
+  const recent = state.spots.slice(-1)[0];
+
+  let html = '';
+
+  if (recent) {
+    const dist = pos ? formatDist(distanceMeters(pos.lat,pos.lng,recent.lat,recent.lng)) : '—';
+    html += `
+      <div class="section-title">último aparcamiento</div>
+      <div class="spot-card" onclick="goNavigate('${recent.id}')">
+        <div class="spot-icon">🚗</div>
+        <div class="spot-info">
+          <div class="spot-name">${recent.name || 'Sin nombre'}</div>
+          <div class="spot-meta">${recent.ref ? '📌 '+recent.ref+' · ' : ''}<span class="time-ago">${timeAgo(recent.ts)}</span></div>
+        </div>
+        <div class="spot-dist">${dist}</div>
+      </div>
+    `;
+    html += `<button class="btn-find" onclick="goNavigate('${recent.id}')"><span class="icon">🔍</span>¿DÓNDE ESTÁ MI COCHE?</button>`;
+    html += '<div class="btn-gap"></div>';
+  }
+
+  html += `<button class="btn-park" onclick="startPark()"><span class="icon">🅿️</span>HE APARCADO AQUÍ</button>`;
+
+  panel.innerHTML = html;
+  renderHomeMap();
+}
+
+function renderHomeMap() {
+  const el = document.getElementById('map-home-inner');
+  const pos = state.currentPos;
+  const recent = state.spots.slice(-1)[0];
+
+  let lat = pos?.lat || 40.4168;
+  let lng = pos?.lng || -3.7038;
+  let zoom = 15;
+  let markers = '';
+
+  if (pos) {
+    markers += `&markers=color:blue%7C${pos.lat},${pos.lng}`;
+  }
+  if (recent) {
+    markers += `&markers=color:orange%7C${recent.lat},${recent.lng}`;
+    if (pos) {
+      lat = (pos.lat + recent.lat) / 2;
+      lng = (pos.lng + recent.lng) / 2;
+      const d = distanceMeters(pos.lat,pos.lng,recent.lat,recent.lng);
+      zoom = d < 300 ? 16 : d < 1000 ? 15 : d < 3000 ? 13 : 11;
+    }
+  }
+
+  // Use OSM embed
+  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.005},${lat-0.003},${lng+0.005},${lat+0.003}&layer=mapnik${pos?`&marker=${pos.lat},${pos.lng}`:''}`;
+  el.innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75)"></iframe>`;
+}
+
+// ─────────────────────────────────────
+// SAVE SCREEN
+// ─────────────────────────────────────
+function startPark() {
+  state.pendingPhotos = [];
+  if (!state.currentPos) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      state.currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      showScreen('save');
+    }, () => {
+      // fallback: use a default position
+      state.currentPos = { lat: 40.4168, lng: -3.7038 };
+      showScreen('save');
+      toast('⚠️ GPS no disponible, posición aproximada');
+    }, {enableHighAccuracy:true, timeout:6000});
+  } else {
+    showScreen('save');
+  }
+}
+
+function initSaveScreen() {
+  state.pendingPos = state.currentPos ? {...state.currentPos} : { lat:40.4168, lng:-3.7038 };
+  document.getElementById('spot-name').value = '';
+  document.getElementById('spot-ref').value = '';
+  document.getElementById('spot-notes').value = '';
+  document.getElementById('photos-strip').innerHTML = `<div class="photo-btn" id="photo-add-btn" onclick="addPhoto()">📷<span style="font-size:10px;margin-top:2px">Foto</span></div>`;
+  state.pendingPhotos = [];
+
+  const {lat,lng} = state.pendingPos;
+  document.getElementById('coords-text').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.003},${lat-0.002},${lng+0.003},${lat+0.002}&layer=mapnik&marker=${lat},${lng}`;
+  document.getElementById('save-map-inner').innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75)"></iframe>`;
+}
+
+function setRef(text) {
+  document.getElementById('spot-ref').value = text;
+}
+
+function addPhoto() {
+  document.getElementById('photo-input').click();
+}
+
+function handlePhoto(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const b64 = ev.target.result;
+    state.pendingPhotos.push(b64);
+    renderPhotoStrip();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderPhotoStrip() {
+  const strip = document.getElementById('photos-strip');
+  let html = `<div class="photo-btn" id="photo-add-btn" onclick="addPhoto()">📷<span style="font-size:10px;margin-top:2px">Foto</span></div>`;
+  state.pendingPhotos.forEach((b64,i) => {
+    html += `<div class="photo-thumb"><img src="${b64}"><button class="photo-del" onclick="removePhoto(${i})">✕</button></div>`;
+  });
+  strip.innerHTML = html;
+}
+
+function removePhoto(i) {
+  state.pendingPhotos.splice(i,1);
+  renderPhotoStrip();
+}
+
+function confirmSave() {
+  const pos = state.pendingPos;
+  if (!pos) { toast('⚠️ Esperando GPS…'); return; }
+
+  const spot = {
+    id: uid(),
+    lat: pos.lat,
+    lng: pos.lng,
+    name: document.getElementById('spot-name').value.trim() || 'Aparcamiento',
+    ref: document.getElementById('spot-ref').value.trim(),
+    notes: document.getElementById('spot-notes').value.trim(),
+    photos: state.pendingPhotos.slice(),
+    ts: Date.now()
+  };
+
+  state.spots.push(spot);
+  saveSpots();
+  toast('🅿️ Aparcamiento guardado');
+  showScreen('home');
+}
+
+// ─────────────────────────────────────
+// NAVIGATE SCREEN
+// ─────────────────────────────────────
+function goNavigate(id) {
+  state.activeSpot = state.spots.find(s => s.id === id);
+  if (!state.activeSpot) return;
+  showScreen('nav');
+}
+
+function initNavScreen() {
+  const spot = state.activeSpot;
+  if (!spot) return;
+
+  const pos = state.currentPos;
+  const dist = pos ? formatDist(distanceMeters(pos.lat,pos.lng,spot.lat,spot.lng)) : '—';
+  const distNum = pos ? Math.round(distanceMeters(pos.lat,pos.lng,spot.lat,spot.lng)) : null;
+
+  document.getElementById('nav-spot-name-display').textContent = spot.name || 'Tu coche';
+
+  const distEl = document.getElementById('nav-dist-display');
+  if (distNum !== null) {
+    distEl.innerHTML = distNum < 1000
+      ? `${distNum}<span class="nav-dist-unit"> m</span>`
+      : `${(distNum/1000).toFixed(1)}<span class="nav-dist-unit"> km</span>`;
+  } else {
+    distEl.textContent = '—';
+  }
+
+  // Map: show both positions
+  let lat = spot.lat, lng = spot.lng;
+  let bboxPad = 0.004;
+  if (pos) {
+    lat = (pos.lat + spot.lat) / 2;
+    lng = (pos.lng + spot.lng) / 2;
+    const d = distanceMeters(pos.lat,pos.lng,spot.lat,spot.lng);
+    bboxPad = Math.max(0.002, d * 0.000015);
+  }
+
+  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-bboxPad},${lat-bboxPad*0.7},${lng+bboxPad},${lat+bboxPad*0.7}&layer=mapnik&marker=${spot.lat},${spot.lng}`;
+  document.getElementById('map-nav-inner').innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75)"></iframe>`;
+}
+
+function openGoogleMaps() {
+  const spot = state.activeSpot;
+  if (!spot) return;
+  const pos = state.currentPos;
+  let url;
+  if (pos) {
+    url = `https://www.google.com/maps/dir/${pos.lat},${pos.lng}/${spot.lat},${spot.lng}/@${spot.lat},${spot.lng},16z/data=!3m1!4b1!4m2!4m1!3e2`;
+  } else {
+    url = `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`;
+  }
+  window.open(url, '_blank');
+}
+
+// ─────────────────────────────────────
+// HISTORY
+// ─────────────────────────────────────
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (!state.spots.length) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🚗</div><div class="empty-title">Sin aparcamientos</div><div class="empty-sub">Pulsa "He aparcado aquí" para guardar tu primera ubicación</div></div>`;
+    return;
+  }
+  const pos = state.currentPos;
+  list.innerHTML = [...state.spots].reverse().map(s => {
+    const dist = pos ? formatDist(distanceMeters(pos.lat,pos.lng,s.lat,s.lng)) : '—';
+    return `
+      <div class="spot-card" style="position:relative;">
+        <div class="spot-icon">${s.photos?.length ? `<img src="${s.photos[0]}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">` : '🚗'}</div>
+        <div class="spot-info" onclick="goNavigate('${s.id}')">
+          <div class="spot-name">${s.name}</div>
+          <div class="spot-meta">${s.ref ? '📌 '+s.ref+' · ' : ''}<span class="time-ago">${timeAgo(s.ts)}</span></div>
+          ${s.notes ? `<div style="font-size:11px;color:var(--text-dim);margin-top:3px">${s.notes}</div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <div class="spot-dist">${dist}</div>
+          <button onclick="askDelete('${s.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;">🗑</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────
+// DELETE
+// ─────────────────────────────────────
+function askDelete(id) {
+  state.deleteId = id;
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+function closeConfirm() {
+  document.getElementById('confirm-overlay').classList.remove('open');
+  state.deleteId = null;
+}
+
+function deleteConfirmed() {
+  if (!state.deleteId) return;
+  state.spots = state.spots.filter(s => s.id !== state.deleteId);
+  saveSpots();
+  closeConfirm();
+  renderHistory();
+  toast('🗑 Aparcamiento eliminado');
+}
+
+// ─────────────────────────────────────
+// INIT
+// ─────────────────────────────────────
+startGPS();
+renderHome();
+
+// PWA service worker register
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
