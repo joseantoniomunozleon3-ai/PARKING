@@ -1,8 +1,10 @@
-const CACHE = 'parkradar-v1';
+const CACHE = 'parkradar-v2';
 const ASSETS = [
-  '/PARKING/',
-  '/PARKING/index.html',
-  '/PARKING/manifest.json'
+  './',
+  './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 self.addEventListener('install', e => {
@@ -23,7 +25,7 @@ self.addEventListener('fetch', e => {
   // For navigation requests, try network first, fallback to cache
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      fetch(e.request).catch(() => caches.match('/PARKING/index.html'))
+      fetch(e.request).catch(() => caches.match('./index.html'))
     );
     return;
   }
