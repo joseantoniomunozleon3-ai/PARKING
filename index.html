@@ -564,6 +564,19 @@
     color:var(--cyan); padding:2px 8px;
     background:var(--cyan-dim); border-radius:6px;
   }
+  .btn-install {
+    display: none;
+    align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 100px;
+    background: var(--amber); border: none;
+    font-family: var(--font-body); font-size: 12px;
+    font-weight: 700; color: var(--bg); cursor: pointer;
+    animation: pulse-install 2s infinite;
+  }
+  @keyframes pulse-install {
+    0%,100%{box-shadow:0 0 0 0 rgba(245,166,35,0.5)}
+    50%{box-shadow:0 0 0 8px rgba(245,166,35,0)}
+  }
 </style>
 </head>
 <body>
@@ -576,7 +589,10 @@
 <div id="screen-home" class="screen active" style="background:var(--bg);">
   <div class="header">
     <div class="logo">PARK<span>RADAR</span></div>
-    <div class="status-dot" id="gps-dot" title="GPS activo"></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button id="btn-install" class="btn-install" onclick="triggerInstall()">⬇ INSTALAR</button>
+      <div class="status-dot" id="gps-dot" title="GPS activo"></div>
+    </div>
   </div>
 
   <div id="map-home" style="flex:1;position:relative;min-height:0;">
@@ -1270,10 +1286,30 @@ startGPS();
 renderHome();
 
 // PWA service worker register
+function triggerInstall() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
+  }
+}
+
+// PWA install
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('btn-install').style.display = 'flex';
+});
+window.addEventListener('appinstalled', () => {
+  document.getElementById('btn-install').style.display = 'none';
+});
+
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/PARKING/sw.js', { scope: '/PARKING/' })
-    .then(reg => console.log('SW registrado, scope:', reg.scope))
-    .catch(err => console.error('SW error:', err));
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/PARKING/sw.js', { scope: '/PARKING/' })
+      .then(reg => console.log('SW ok:', reg.scope))
+      .catch(err => console.error('SW error:', err));
+  });
 }
 </script>
 </body>
