@@ -442,7 +442,69 @@
   .btn-del { flex:1; padding:16px; border:none; background:var(--red); color:#fff; border-radius:12px; font-family:var(--font-display); font-size:20px; letter-spacing:2px; cursor:pointer; }
   .btn-cancel { flex:1; padding:16px; border:1px solid var(--border); background:transparent; color:var(--text-dim); border-radius:12px; font-family:var(--font-body); font-size:15px; cursor:pointer; }
 
-  /* ── SCROLLBAR ── */
+  /* ── MANUAL BUTTON ── */
+  .btn-manual {
+    width:100%; padding:16px 24px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--font-display);
+    font-size: 20px; letter-spacing: 2px;
+    color: var(--text-dim); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    transition: all .2s;
+  }
+  .btn-manual:active { border-color: var(--amber); color: var(--amber); }
+
+  /* ── MANUAL SCREEN ── */
+  .search-bar {
+    display: flex; gap: 10px; align-items: center;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px 16px;
+    transition: border-color .2s;
+  }
+  .search-bar:focus-within { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-glow); }
+  .search-bar input {
+    flex:1; background:none; border:none; outline:none;
+    color: var(--text); font-family: var(--font-body); font-size: 15px;
+  }
+  .search-bar input::placeholder { color: var(--text-dim); }
+  .search-btn {
+    background: var(--amber); border: none; border-radius: 10px;
+    width: 38px; height: 38px; cursor: pointer; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: opacity .2s;
+  }
+  .search-btn:active { opacity: .7; }
+  .search-results { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+  .search-result-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+    cursor: pointer; transition: border-color .2s, background .2s;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .search-result-item:active { border-color: var(--amber); background: var(--amber-glow); }
+  .result-icon { font-size: 24px; flex-shrink:0; }
+  .result-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .result-addr { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+  .manual-or {
+    text-align: center; color: var(--text-dim); font-size: 13px;
+    margin: 8px 0; position: relative;
+  }
+  .manual-or::before, .manual-or::after {
+    content:''; position:absolute; top:50%; width:38%; height:1px;
+    background: var(--border);
+  }
+  .manual-or::before { left:0; }
+  .manual-or::after { right:0; }
+  .btn-use-current {
+    width:100%; padding:16px; background: var(--bg3);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--cyan); font-family: var(--font-body); font-size:14px;
+    font-weight:600; cursor:pointer; transition: all .2s;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn-use-current:active { border-color: var(--cyan); background: var(--cyan-dim); }
   ::-webkit-scrollbar { width:4px; height:4px; }
   ::-webkit-scrollbar-track { background:transparent; }
   ::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
@@ -597,6 +659,62 @@
 </div>
 
 <!-- ═══════════════════════════════════
+     SCREEN MANUAL
+═══════════════════════════════════ -->
+<div id="screen-manual" class="screen" style="background:var(--bg);">
+  <div class="header">
+    <div class="logo">PARK<span>RADAR</span></div>
+    <button onclick="showScreen('home')" style="background:none;border:none;color:var(--text-dim);font-size:28px;cursor:pointer;">✕</button>
+  </div>
+
+  <div style="flex:1;overflow-y:auto;padding:0 20px 36px;display:flex;flex-direction:column;gap:16px;">
+    <div>
+      <div class="save-title" style="margin-bottom:6px;">APARQUÉ ANTES</div>
+      <div style="font-size:14px;color:var(--text-dim);line-height:1.5;">Busca la calle, negocio o lugar cercano donde aparcaste y lo guardaremos.</div>
+    </div>
+
+    <div>
+      <label>Buscar dirección o lugar</label>
+      <div class="search-bar">
+        <input type="text" id="manual-search-input" placeholder="Ej: Calle Mayor 5, Mercadona…" onkeydown="if(event.key==='Enter')searchAddress()">
+        <button class="search-btn" onclick="searchAddress()">🔍</button>
+      </div>
+    </div>
+
+    <div id="manual-search-results" class="search-results"></div>
+
+    <div class="manual-or">o usa tu posición actual</div>
+
+    <button class="btn-use-current" onclick="useCurrentForManual()">
+      📍 Usar mi ubicación actual
+    </button>
+
+    <div id="manual-selected-card" style="display:none;">
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">📌 Ubicación seleccionada</div>
+      <div class="spot-card" style="cursor:default;border-color:var(--amber);">
+        <div class="spot-icon">📍</div>
+        <div class="spot-info">
+          <div class="spot-name" id="manual-selected-name">—</div>
+          <div class="spot-meta" id="manual-selected-addr">—</div>
+        </div>
+      </div>
+      <div style="height:10px;"></div>
+      <div>
+        <label>Nombre del aparcamiento (opcional)</label>
+        <input type="text" id="manual-spot-name" placeholder="Ej: Junto al bar de la esquina…">
+      </div>
+      <div style="height:10px;"></div>
+      <div>
+        <label>Notas</label>
+        <input type="text" id="manual-spot-notes" placeholder="Planta, color zona, señas…">
+      </div>
+      <div style="height:16px;"></div>
+      <button class="btn-save-confirm" onclick="saveManualSpot()">GUARDAR APARCAMIENTO</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
      SCREEN HISTORY
 ═══════════════════════════════════ -->
 <div id="screen-history" class="screen" style="background:var(--bg);">
@@ -740,6 +858,12 @@ function showScreen(name) {
   if (name==='history') renderHistory();
   if (name==='save') initSaveScreen();
   if (name==='nav') initNavScreen();
+  if (name==='manual') {
+    manualSelectedPos = null;
+    document.getElementById('manual-selected-card').style.display = 'none';
+    document.getElementById('manual-search-input').value = '';
+    document.getElementById('manual-search-results').innerHTML = '';
+  }
 }
 
 // ─────────────────────────────────────
@@ -770,6 +894,8 @@ function renderHome() {
   }
 
   html += `<button class="btn-park" onclick="startPark()"><span class="icon">🅿️</span>HE APARCADO AQUÍ</button>`;
+  html += '<div class="btn-gap"></div>';
+  html += `<button class="btn-manual" onclick="showScreen('manual')"><span class="icon">⏱️</span>APARQUÉ ANTES AQUÍ</button>`;
 
   panel.innerHTML = html;
   renderHomeMap();
@@ -894,7 +1020,85 @@ function confirmSave() {
 }
 
 // ─────────────────────────────────────
-// NAVIGATE SCREEN
+// MANUAL PARK
+// ─────────────────────────────────────
+let manualSelectedPos = null;
+
+function searchAddress() {
+  const q = document.getElementById('manual-search-input').value.trim();
+  if (!q) return;
+  const resultsEl = document.getElementById('manual-search-results');
+  resultsEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-dim)"><div class="spinner" style="margin:0 auto 10px"></div>Buscando…</div>`;
+
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&addressdetails=1`;
+  fetch(url, { headers: { 'Accept-Language': 'es' } })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.length) {
+        resultsEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-dim)">Sin resultados. Prueba con otra búsqueda.</div>`;
+        return;
+      }
+      resultsEl.innerHTML = data.map((item, i) => {
+        const name = item.name || item.display_name.split(',')[0];
+        const addr = item.display_name;
+        return `<div class="search-result-item" onclick="selectManualResult(${item.lat}, ${item.lon}, '${name.replace(/'/g,"\\'")}', '${addr.replace(/'/g,"\\'").substring(0,80)}')">
+          <div class="result-icon">📍</div>
+          <div>
+            <div class="result-name">${name}</div>
+            <div class="result-addr">${addr.substring(0,70)}…</div>
+          </div>
+        </div>`;
+      }).join('');
+    })
+    .catch(() => {
+      resultsEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--red)">Error de conexión. Comprueba internet.</div>`;
+    });
+}
+
+function selectManualResult(lat, lng, name, addr) {
+  manualSelectedPos = { lat: parseFloat(lat), lng: parseFloat(lng) };
+  document.getElementById('manual-selected-name').textContent = name;
+  document.getElementById('manual-selected-addr').textContent = addr;
+  document.getElementById('manual-spot-name').value = name;
+  document.getElementById('manual-selected-card').style.display = 'block';
+  document.getElementById('manual-search-results').innerHTML = '';
+  document.getElementById('manual-selected-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+function useCurrentForManual() {
+  const pos = state.currentPos;
+  if (!pos) {
+    navigator.geolocation.getCurrentPosition(p => {
+      state.currentPos = { lat: p.coords.latitude, lng: p.coords.longitude };
+      selectManualResult(p.coords.latitude, p.coords.longitude, 'Mi ubicación actual', `${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`);
+    }, () => toast('⚠️ No se pudo obtener el GPS'), { enableHighAccuracy: true, timeout: 8000 });
+  } else {
+    selectManualResult(pos.lat, pos.lng, 'Mi ubicación actual', `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`);
+  }
+}
+
+function saveManualSpot() {
+  if (!manualSelectedPos) { toast('⚠️ Selecciona una ubicación primero'); return; }
+  const spot = {
+    id: uid(),
+    lat: manualSelectedPos.lat,
+    lng: manualSelectedPos.lng,
+    name: document.getElementById('manual-spot-name').value.trim() || 'Aparcamiento',
+    ref: document.getElementById('manual-selected-name').textContent,
+    notes: document.getElementById('manual-spot-notes').value.trim(),
+    photos: [],
+    ts: Date.now()
+  };
+  state.spots.push(spot);
+  saveSpots();
+  manualSelectedPos = null;
+  document.getElementById('manual-selected-card').style.display = 'none';
+  document.getElementById('manual-search-input').value = '';
+  toast('🅿️ Aparcamiento guardado');
+  showScreen('home');
+}
+
+// ─────────────────────────────────────
 // ─────────────────────────────────────
 function goNavigate(id) {
   state.activeSpot = state.spots.find(s => s.id === id);
