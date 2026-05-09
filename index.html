@@ -806,13 +806,30 @@ function uid() {
 }
 
 function timeAgo(ts) {
-  const diff = (Date.now() - ts) / 1000;
+  const diff = Math.floor((Date.now() - ts) / 1000);
   if (diff < 60) return 'hace un momento';
-  if (diff < 3600) return `hace ${Math.floor(diff/60)} min`;
-  if (diff < 86400) return `hace ${Math.floor(diff/3600)}h`;
-  if (diff < 7*86400) return `hace ${Math.floor(diff/86400)}d`;
-  return new Date(ts).toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+  if (diff < 3600) {
+    const m = Math.floor(diff / 60);
+    return `hace ${m} min`;
+  }
+  if (diff < 86400) {
+    const h = Math.floor(diff / 3600);
+    return `hace ${h}h`;
+  }
+  if (diff < 7 * 86400) {
+    const d = Math.floor(diff / 86400);
+    return `hace ${d}d`;
+  }
+  return new Date(ts).toLocaleDateString('es-ES', { day:'numeric', month:'short' });
 }
+
+// Actualizar solo el texto de tiempo cada 60 segundos, sin recargar el mapa
+setInterval(() => {
+  const recent = state.spots.slice(-1)[0];
+  if (!recent) return;
+  const el = document.querySelector('#home-bottom .time-ago');
+  if (el) el.textContent = timeAgo(recent.ts);
+}, 60000);
 
 function distanceMeters(lat1,lon1,lat2,lon2) {
   const R=6371000, phi1=lat1*Math.PI/180, phi2=lat2*Math.PI/180;
@@ -839,13 +856,27 @@ function toast(msg) {
 function startGPS() {
   if (!navigator.geolocation) return;
   navigator.geolocation.watchPosition(pos => {
+    const changed = !state.currentPos;
     state.currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     document.getElementById('gps-dot').style.background = 'var(--green)';
-    renderHome();
+    // Solo re-renderizar el home completo la primera vez que llega GPS
+    if (changed) {
+      renderHome();
+    } else {
+      // Solo actualizar distancia sin reconstruir
+      updateHomeDist();
+    }
   }, err => {
     document.getElementById('gps-dot').style.background = 'var(--red)';
-    console.warn('GPS:', err);
-  }, { enableHighAccuracy:true, maximumAge:5000 });
+  }, { enableHighAccuracy:true, maximumAge:10000 });
+}
+
+function updateHomeDist() {
+  const pos = state.currentPos;
+  const recent = state.spots.slice(-1)[0];
+  if (!pos || !recent) return;
+  const distEl = document.getElementById('home-dist');
+  if (distEl) distEl.textContent = formatDist(distanceMeters(pos.lat,pos.lng,recent.lat,recent.lng));
 }
 
 // ─────────────────────────────────────
@@ -869,6 +900,8 @@ function showScreen(name) {
 // ─────────────────────────────────────
 // HOME
 // ─────────────────────────────────────
+let homeRendered = false;
+
 function renderHome() {
   const panel = document.getElementById('home-bottom');
   const pos = state.currentPos;
@@ -878,15 +911,16 @@ function renderHome() {
 
   if (recent) {
     const dist = pos ? formatDist(distanceMeters(pos.lat,pos.lng,recent.lat,recent.lng)) : '—';
+    const ago = timeAgo(recent.ts);
     html += `
       <div class="section-title">último aparcamiento</div>
       <div class="spot-card" onclick="goNavigate('${recent.id}')">
         <div class="spot-icon">🚗</div>
         <div class="spot-info">
           <div class="spot-name">${recent.name || 'Sin nombre'}</div>
-          <div class="spot-meta">${recent.ref ? '📌 '+recent.ref+' · ' : ''}<span class="time-ago">${timeAgo(recent.ts)}</span></div>
+          <div class="spot-meta">${recent.ref ? '📌 '+recent.ref+' · ' : ''}<span class="time-ago">${ago}</span></div>
         </div>
-        <div class="spot-dist">${dist}</div>
+        <div class="spot-dist" id="home-dist">${dist}</div>
       </div>
     `;
     html += `<button class="btn-find" onclick="goNavigate('${recent.id}')"><span class="icon">🔍</span>¿DÓNDE ESTÁ MI COCHE?</button>`;
@@ -898,35 +932,39 @@ function renderHome() {
   html += `<button class="btn-manual" onclick="showScreen('manual')"><span class="icon">⏱️</span>APARQUÉ ANTES AQUÍ</button>`;
 
   panel.innerHTML = html;
+  homeRendered = true;
   renderHomeMap();
 }
+
+let homeMapLoaded = false;
 
 function renderHomeMap() {
   const el = document.getElementById('map-home-inner');
   const pos = state.currentPos;
   const recent = state.spots.slice(-1)[0];
 
-  let lat = pos?.lat || 40.4168;
-  let lng = pos?.lng || -3.7038;
+  // No recargar el mapa si ya está puesto (evita parpadeo)
+  if (homeMapLoaded) return;
+  homeMapLoaded = true;
+
+  let lat = pos?.lat || (recent?.lat) || 40.4168;
+  let lng = pos?.lng || (recent?.lng) || -3.7038;
   let zoom = 15;
-  let markers = '';
 
-  if (pos) {
-    markers += `&markers=color:blue%7C${pos.lat},${pos.lng}`;
-  }
-  if (recent) {
-    markers += `&markers=color:orange%7C${recent.lat},${recent.lng}`;
-    if (pos) {
-      lat = (pos.lat + recent.lat) / 2;
-      lng = (pos.lng + recent.lng) / 2;
-      const d = distanceMeters(pos.lat,pos.lng,recent.lat,recent.lng);
-      zoom = d < 300 ? 16 : d < 1000 ? 15 : d < 3000 ? 13 : 11;
-    }
+  if (pos && recent) {
+    lat = (pos.lat + recent.lat) / 2;
+    lng = (pos.lng + recent.lng) / 2;
+    const d = distanceMeters(pos.lat,pos.lng,recent.lat,recent.lng);
+    zoom = d < 300 ? 16 : d < 1000 ? 15 : d < 3000 ? 13 : 11;
   }
 
-  // Use OSM embed
-  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.005},${lat-0.003},${lng+0.005},${lat+0.003}&layer=mapnik${pos?`&marker=${pos.lat},${pos.lng}`:''}`;
-  el.innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75)"></iframe>`;
+  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.005},${lat-0.003},${lng+0.005},${lat+0.003}&layer=mapnik${pos?`&marker=${pos.lat},${pos.lng}`:''}${recent?`&marker=${recent.lat},${recent.lng}`:''}`;
+  el.innerHTML = `<iframe src="${url}" style="width:100%;height:100%;border:none;filter:invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75)"></iframe>`;
+}
+
+// Resetear mapa al guardar nuevo aparcamiento para que se recargue con nueva posición
+function resetHomeMap() {
+  homeMapLoaded = false;
 }
 
 // ─────────────────────────────────────
@@ -1036,6 +1074,7 @@ function confirmSave() {
 
   state.spots.push(spot);
   saveSpots();
+  resetHomeMap();
   toast('🅿️ Aparcamiento guardado');
   showScreen('home');
 }
@@ -1112,6 +1151,7 @@ function saveManualSpot() {
   };
   state.spots.push(spot);
   saveSpots();
+  resetHomeMap();
   manualSelectedPos = null;
   document.getElementById('manual-selected-card').style.display = 'none';
   document.getElementById('manual-search-input').value = '';
