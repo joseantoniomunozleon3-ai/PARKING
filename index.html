@@ -12,6 +12,8 @@
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
   :root {
@@ -106,9 +108,12 @@
     background: var(--bg2);
     overflow: hidden;
   }
-  #map-home iframe, #map-nav iframe {
-    width:100%; height:100%; border:none;
-    filter: invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75);
+  .leaflet-container {
+    background: var(--bg2) !important;
+  }
+  /* Slightly darken tiles to match the dark theme */
+  .leaflet-tile {
+    filter: brightness(0.88) saturate(1.1);
   }
 
   /* Map overlay gradient bottom */
@@ -225,9 +230,8 @@
     border-radius:0;
     min-height:200px; max-height:260px;
   }
-  .save-map-wrap iframe {
-    width:100%;height:100%;border:none;
-    filter: invert(0.9) hue-rotate(190deg) saturate(0.8) brightness(0.75);
+  .save-map-wrap .leaflet-container {
+    width:100%;height:100%;
   }
   .pin-center {
     position:absolute; top:50%; left:50%;
@@ -1022,10 +1026,32 @@ function renderHome() {
   renderHomeMap();
 }
 
+// ── LEAFLET HELPERS ──────────────────
+const G_TILES = 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
+const G_ATTR  = '&copy; Google Maps';
+
+function iconMe() {
+  return L.divIcon({
+    className:'',
+    html:'<div style="width:16px;height:16px;background:#f5a623;border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px #f5a623;"></div>',
+    iconSize:[16,16], iconAnchor:[8,8]
+  });
+}
+function iconCar() {
+  return L.divIcon({
+    className:'',
+    html:'<div style="font-size:30px;line-height:1;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.8));">🚗</div>',
+    iconSize:[32,32], iconAnchor:[16,28]
+  });
+}
+function newTileLayer() {
+  return L.tileLayer(G_TILES, { attribution: G_ATTR, maxZoom: 20 });
+}
+
 let homeMapLoaded = false;
+let homeMap = null;
 
 function renderHomeMap() {
-  const el = document.getElementById('map-home-inner');
   const pos = state.currentPos;
   const recent = state.spots.slice(-1)[0];
 
@@ -1034,18 +1060,22 @@ function renderHomeMap() {
 
   let lat = pos?.lat || recent?.lat || 40.4168;
   let lng = pos?.lng || recent?.lng || -3.7038;
+  if (pos && recent) { lat = (pos.lat+recent.lat)/2; lng = (pos.lng+recent.lng)/2; }
 
-  if (pos && recent) {
-    lat = (pos.lat + recent.lat) / 2;
-    lng = (pos.lng + recent.lng) / 2;
-  }
+  const el = document.getElementById('map-home-inner');
+  if (homeMap) { homeMap.remove(); homeMap = null; }
 
-  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.005},${lat-0.003},${lng+0.005},${lat+0.003}&layer=mapnik${pos?`&marker=${pos.lat},${pos.lng}`:''}${recent?`&marker=${recent.lat},${recent.lng}`:''}`;
-  el.innerHTML = `<iframe src="${url}" style="width:100%;height:100%;border:none;filter:invert(0.85) hue-rotate(190deg) saturate(1.1) brightness(0.92)"></iframe>`;
+  homeMap = L.map(el, { zoomControl:false, attributionControl:false }).setView([lat,lng], 15);
+  newTileLayer().addTo(homeMap);
+
+  const markers = [];
+  if (pos)    markers.push(L.marker([pos.lat,pos.lng],       {icon:iconMe()}).addTo(homeMap));
+  if (recent) markers.push(L.marker([recent.lat,recent.lng], {icon:iconCar()}).addTo(homeMap));
+  if (markers.length===2) homeMap.fitBounds(L.featureGroup(markers).getBounds().pad(0.3));
 }
 
-// Resetear mapa al guardar nuevo aparcamiento para que se recargue con nueva posición
 function resetHomeMap() {
+  if (homeMap) { homeMap.remove(); homeMap = null; }
   homeMapLoaded = false;
 }
 
@@ -1069,8 +1099,17 @@ function startPark() {
   }
 }
 
+let saveMap = null;
+
+function renderSaveMap(lat, lng) {
+  const el = document.getElementById('save-map-inner');
+  if (saveMap) { saveMap.remove(); saveMap = null; }
+  saveMap = L.map(el, { zoomControl:false, attributionControl:false, dragging:false, scrollWheelZoom:false }).setView([lat,lng], 17);
+  newTileLayer().addTo(saveMap);
+  L.marker([lat,lng], {icon:iconCar()}).addTo(saveMap);
+}
+
 function initSaveScreen() {
-  // Usar posición actual si existe, si no pedir GPS en segundo plano
   state.pendingPos = state.currentPos ? {...state.currentPos} : null;
   document.getElementById('spot-name').value = '';
   document.getElementById('spot-ref').value = '';
@@ -1081,18 +1120,15 @@ function initSaveScreen() {
   if (state.pendingPos) {
     const {lat,lng} = state.pendingPos;
     document.getElementById('coords-text').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.003},${lat-0.002},${lng+0.003},${lat+0.002}&layer=mapnik&marker=${lat},${lng}`;
-    document.getElementById('save-map-inner').innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.85) hue-rotate(190deg) saturate(1.1) brightness(0.92)"></iframe>`;
+    renderSaveMap(lat, lng);
   } else {
     document.getElementById('coords-text').textContent = 'obteniendo GPS…';
-    // Intentar GPS en segundo plano y actualizar si llega
     navigator.geolocation.getCurrentPosition(pos => {
       state.pendingPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       state.currentPos = { ...state.pendingPos };
       const {lat,lng} = state.pendingPos;
       document.getElementById('coords-text').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-      const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.003},${lat-0.002},${lng+0.003},${lat+0.002}&layer=mapnik&marker=${lat},${lng}`;
-      document.getElementById('save-map-inner').innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.85) hue-rotate(190deg) saturate(1.1) brightness(0.92)"></iframe>`;
+      renderSaveMap(lat, lng);
     }, () => {
       document.getElementById('coords-text').textContent = 'GPS no disponible';
     }, { enableHighAccuracy: true, timeout: 10000 });
@@ -1269,18 +1305,25 @@ function initNavScreen() {
     if (d < 30) showFoundPanel();
   }, ()=>{}, { enableHighAccuracy: true, maximumAge: 3000 });
 
-  // Mapa
+  // Mapa navegación
   const pos = state.currentPos;
-  let lat = spot.lat, lng = spot.lng;
-  let bboxPad = 0.004;
+  const el = document.getElementById('map-nav-inner');
+  if (window._navMap) { window._navMap.remove(); window._navMap = null; }
+
+  let centerLat = spot.lat, centerLng = spot.lng, zoom = 16;
   if (pos) {
-    lat = (pos.lat + spot.lat) / 2;
-    lng = (pos.lng + spot.lng) / 2;
-    const d = distanceMeters(pos.lat,pos.lng,spot.lat,spot.lng);
-    bboxPad = Math.max(0.002, d * 0.000015);
+    centerLat = (pos.lat + spot.lat) / 2;
+    centerLng = (pos.lng + spot.lng) / 2;
   }
-  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-bboxPad},${lat-bboxPad*0.7},${lng+bboxPad},${lat+bboxPad*0.7}&layer=mapnik&marker=${spot.lat},${spot.lng}`;
-  document.getElementById('map-nav-inner').innerHTML = `<iframe src="${url}" loading="lazy" style="width:100%;height:100%;border:none;filter:invert(0.85) hue-rotate(190deg) saturate(1.1) brightness(0.92)"></iframe>`;
+
+  window._navMap = L.map(el, { zoomControl:false, attributionControl:false }).setView([centerLat, centerLng], zoom);
+  newTileLayer().addTo(window._navMap);
+
+  const navMarkers = [L.marker([spot.lat, spot.lng], {icon:iconCar()}).addTo(window._navMap)];
+  if (pos) {
+    navMarkers.push(L.marker([pos.lat, pos.lng], {icon:iconMe()}).addTo(window._navMap));
+    window._navMap.fitBounds(L.featureGroup(navMarkers).getBounds().pad(0.25));
+  }
 }
 
 function updateNavDisplay() {
